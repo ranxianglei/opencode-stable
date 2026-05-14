@@ -164,6 +164,10 @@ export const Info = Schema.Struct({
     description:
       "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
   }),
+  pluginAutoInstall: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Automatically install/update plugins from npm. Set to false to disable all plugin auto-installation (prevents npm installs of plugin dependencies). Default: true",
+  }),
   disabled_providers: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Disable providers that are loaded automatically",
   }),
