@@ -502,9 +502,17 @@ export const layer: Layer.Layer<
                 messageID: ctx.assistantMessage.parentID,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
+            const tokenCount =
+              usage.tokens.total ||
+              usage.tokens.input + usage.tokens.output + usage.tokens.cache.read + usage.tokens.cache.write
             if (
               !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+              (isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model }) ||
+                // Model returned "length" finish with zero tokens — this happens when
+                // the API rejects the request as context overflow (e.g. GLM-5.1
+                // model_context_window_exceeded) without providing usage data.
+                // Treat it as overflow so compaction is triggered.
+                (value.finishReason === "length" && tokenCount === 0))
             ) {
               ctx.needsCompaction = true
             }

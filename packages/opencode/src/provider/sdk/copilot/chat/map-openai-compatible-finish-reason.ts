@@ -13,6 +13,8 @@ export function mapOpenAICompatibleFinishReason(
     case "function_call":
     case "tool_calls":
       return "tool-calls"
+    case "model_context_window_exceeded":
+      return "length"
     default:
       return "other"
   }
