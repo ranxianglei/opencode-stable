@@ -1,0 +1,76 @@
+diff --git a/index.ts b/index.ts
+index 0a413ac9e1f520d655c28ef7a8877786ca79c7c6..bd983b42ff94644f41e69da9feec9088544c4102 100644
+--- a/index.ts
++++ b/index.ts
+@@ -1,3 +1,69 @@
++import { existsSync, mkdirSync, writeFileSync, renameSync, readdirSync, unlinkSync } from "node:fs"
++import { join } from "node:path"
++import { tmpdir } from "node:os"
++import { createHash } from "node:crypto"
++
+ const module = await import("./libopentui.so", { with: { type: "file" } })
+-const path = module.default
+-export default path;
++const embeddedPath = module.default
++
++// Under `bun build --compile`, this asset lives in bunfs (a virtual path like
++// "/$bunfs/root/libopentui.so"). dlopen() can't load a virtual path, so Bun
++// extracts it to a random "/tmp/.{hash}-00000000.so" on EVERY launch. That temp
++// file is only unlinked by an exit handler, which is skipped on crash/SIGKILL —
++// so every crashed launch orphans ~4.5MB (observed: 55k files / 248GB).
++//
++// Fix: materialize the embedded bytes once to a stable, content-addressed cache
++// file and dlopen that real path. Reused across launches, so a crash can only
++// ever leave the single cache file (which the next launch reuses). Dev (non-
++// bunfs) paths pass through unchanged.
++function isBunfsPath(p: unknown): p is string {
++  return typeof p === "string" && (p.includes("$bunfs") || /^B:[\\/]~BUN/i.test(p))
++}
++
++function cacheDir(): string {
++  if (process.platform === "win32") {
++    return join(process.env.LOCALAPPDATA || process.env.APPDATA || tmpdir(), "opentui")
++  }
++  return join(process.env.XDG_CACHE_HOME || join(process.env.HOME || tmpdir(), ".cache"), "opentui")
++}
++
++async function materialize(bunfsPath: string): Promise<string> {
++  let bytes: Uint8Array
++  try {
++    bytes = new Uint8Array(await Bun.file(bunfsPath).arrayBuffer())
++  } catch {
++    return bunfsPath
++  }
++
++  const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 16)
++  const dir = cacheDir()
++  try {
++    mkdirSync(dir, { recursive: true })
++  } catch {}
++
++  const ext = bunfsPath.match(/\.(so|dylib|dll)$/i)?.[0]?.toLowerCase() || ".so"
++  const dest = join(dir, `libopentui-${process.platform}-${process.arch}-${hash}${ext}`)
++
++  if (!existsSync(dest)) {
++    const tmp = `${dest}.${process.pid}.tmp`
++    try {
++      writeFileSync(tmp, bytes)
++      renameSync(tmp, dest)
++    } catch {
++      return bunfsPath
++    }
++    try {
++      for (const f of readdirSync(dir)) {
++        if (!/^libopentui-.*\.(so|dylib|dll)$/i.test(f)) continue
++        const fp = join(dir, f)
++        if (fp !== dest) {
++          try { unlinkSync(fp) } catch {}
++        }
++      }
++    } catch {}
++  }
++
++  return dest
++}
++
++export default isBunfsPath(embeddedPath) ? await materialize(embeddedPath) : embeddedPath
