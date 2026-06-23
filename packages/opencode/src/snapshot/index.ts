@@ -316,6 +316,7 @@ export const layer: Layer.Layer<
         })
 
         const patch = Effect.fnUntraced(function* (hash: string) {
+          if (!(yield* enabled())) return { hash, files: [] }
           return yield* locked(
             Effect.gen(function* () {
               yield* add()
@@ -349,6 +350,7 @@ export const layer: Layer.Layer<
         })
 
         const restore = Effect.fnUntraced(function* (snapshot: string) {
+          if (!(yield* enabled())) return
           return yield* locked(
             Effect.gen(function* () {
               log.info("restore", { commit: snapshot })
@@ -375,6 +377,7 @@ export const layer: Layer.Layer<
         })
 
         const revert = Effect.fnUntraced(function* (patches: Patch[]) {
+          if (!(yield* enabled())) return
           return yield* locked(
             Effect.gen(function* () {
               const ops: { hash: string; file: string; rel: string }[] = []
@@ -490,6 +493,7 @@ export const layer: Layer.Layer<
         })
 
         const diff = Effect.fnUntraced(function* (hash: string) {
+          if (!(yield* enabled())) return ""
           return yield* locked(
             Effect.gen(function* () {
               yield* add()
@@ -510,6 +514,7 @@ export const layer: Layer.Layer<
         })
 
         const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
+          if (!(yield* enabled())) return []
           return yield* locked(
             Effect.gen(function* () {
               type Row = {
