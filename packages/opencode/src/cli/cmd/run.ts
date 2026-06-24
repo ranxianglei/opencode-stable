@@ -681,6 +681,13 @@ export const RunCommand = effectCmd({
         // (child) sessions may still be running. Wait for all of them to finish
         // before returning so disposing the instance doesn't kill them.
         await done
+        // Plugin background handles (e.g. unawaited prompt promises, task-manager
+        // timers) can keep the event loop alive after every session is idle. The
+        // run command is one-shot, so once all sessions are done we exit
+        // deterministically. unref() ensures this timer never prevents a natural
+        // exit when no plugin handles are pending.
+        const fallbackExit = setTimeout(() => process.exit(0), 2000)
+        fallbackExit.unref?.()
       }
 
       if (args.attach) {
