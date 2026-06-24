@@ -441,8 +441,19 @@ export const RunCommand = effectCmd({
         const events = await sdk.event.subscribe()
         let error: string | undefined
 
+        // Controls when execute() returns: resolves only after the main session is
+        // idle AND no background/child sessions are still running. Without this,
+        // background agents (e.g. delegate_task with run_in_background) get killed
+        // when the process exits right after the main session finishes.
+        let resolveDone: () => void
+        const done = new Promise<void>((resolve) => (resolveDone = resolve))
+
         async function loop() {
           const toggles = new Map<string, boolean>()
+          // Track every session that is busy/retry so execute() doesn't exit while
+          // background (child) sessions are still running.
+          const busy = new Set<string>()
+          let mainIdle = false
 
           for await (const event of events.stream) {
             if (
@@ -533,12 +544,15 @@ export const RunCommand = effectCmd({
               UI.error(err)
             }
 
-            if (
-              event.type === "session.status" &&
-              event.properties.sessionID === sessionID &&
-              event.properties.status.type === "idle"
-            ) {
-              break
+            if (event.type === "session.status") {
+              const { sessionID: sid, status } = event.properties
+              if (status.type === "idle") {
+                busy.delete(sid)
+                if (sid === sessionID) mainIdle = true
+                if (mainIdle && busy.size === 0) resolveDone()
+              } else {
+                busy.add(sid)
+              }
             }
 
             if (event.type === "permission.asked") {
@@ -563,6 +577,9 @@ export const RunCommand = effectCmd({
               }
             }
           }
+          // Stream closed (e.g. server shutdown) before the exit condition was
+          // met — unblock execute() so it doesn't hang forever.
+          resolveDone()
         }
 
         // Validate agent if specified
@@ -659,6 +676,18 @@ export const RunCommand = effectCmd({
             parts: [...files, { type: "text", text: message }],
           })
         }
+
+        // prompt()/command() return once the main session is idle, but background
+        // (child) sessions may still be running. Wait for all of them to finish
+        // before returning so disposing the instance doesn't kill them.
+        await done
+        // Plugin background handles (e.g. unawaited prompt promises, task-manager
+        // timers) can keep the event loop alive after every session is idle. The
+        // run command is one-shot, so once all sessions are done we exit
+        // deterministically. unref() ensures this timer never prevents a natural
+        // exit when no plugin handles are pending.
+        const fallbackExit = setTimeout(() => process.exit(0), 2000)
+        fallbackExit.unref?.()
       }
 
       if (args.attach) {
