@@ -454,6 +454,7 @@ export const RunCommand = effectCmd({
           // background (child) sessions are still running.
           const busy = new Set<string>()
           let mainIdle = false
+          let graceTimer: ReturnType<typeof setTimeout> | undefined
 
           for await (const event of events.stream) {
             if (
@@ -549,9 +550,23 @@ export const RunCommand = effectCmd({
               if (status.type === "idle") {
                 busy.delete(sid)
                 if (sid === sessionID) mainIdle = true
-                if (mainIdle && busy.size === 0) resolveDone()
               } else {
                 busy.add(sid)
+                if (graceTimer) {
+                  clearTimeout(graceTimer)
+                  graceTimer = undefined
+                }
+              }
+              // Don't resolve immediately when everything looks idle: background
+              // sessions spawned near the main session's completion emit their
+              // busy event asynchronously, so busy may be momentarily empty.
+              // Wait a grace period; any session going busy during it cancels
+              // the timer above so we keep waiting.
+              if (mainIdle && busy.size === 0 && !graceTimer) {
+                graceTimer = setTimeout(() => {
+                  if (mainIdle && busy.size === 0) resolveDone()
+                }, 3000)
+                graceTimer.unref?.()
               }
             }
 
@@ -579,6 +594,7 @@ export const RunCommand = effectCmd({
           }
           // Stream closed (e.g. server shutdown) before the exit condition was
           // met — unblock execute() so it doesn't hang forever.
+          if (graceTimer) clearTimeout(graceTimer)
           resolveDone()
         }
 
