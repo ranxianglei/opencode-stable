@@ -53,6 +53,7 @@ const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+const noWindows = process.argv.includes("--no-windows")
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
@@ -143,7 +144,7 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+const targets = (singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
@@ -163,6 +164,7 @@ const targets = singleFlag
       return true
     })
   : allTargets
+).filter((item) => !noWindows || item.os !== "win32")
 
 await $`rm -rf dist`
 
@@ -182,7 +184,8 @@ for (const item of targets) {
   ]
     .filter(Boolean)
     .join("-")
-  console.log(`building ${name}`)
+  const pkgName = name + "-stable"
+  console.log(`building ${pkgName}`)
   await $`mkdir -p dist/${name}/bin`
 
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
@@ -242,16 +245,19 @@ for (const item of targets) {
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: pkgName,
         version: Script.version,
+        description: `OpenCode stable fork binary for ${item.os === "win32" ? "windows" : item.os}-${item.arch}`,
         os: [item.os],
         cpu: [item.arch],
+        files: ["bin"],
+        license: pkg.license || "MIT",
       },
       null,
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[pkgName] = Script.version
 }
 
 if (Script.release) {
