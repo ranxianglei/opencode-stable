@@ -35,11 +35,10 @@ Git Safety Protocol:
   - Do not commit files that likely contain secrets (.env, credentials.json, etc.). Warn the user if they specifically request to commit those files
   - Draft a concise (1-2 sentences) commit message that focuses on the "why" rather than the "what"
   - Ensure it accurately reflects the changes and their purpose
-3. Run the following commands in parallel:
+3. Run the following commands sequentially:
    - Add relevant untracked files to the staging area.
-   - Create the commit with a message
-   - Run git status after the commit completes to verify success.
-   Note: git status depends on the commit completing, so run it sequentially after the commit.
+   - Create the commit with a message.
+   - Run git status to verify success.
 4. If the commit fails due to pre-commit hook, fix the issue and create a NEW commit (see amend rules above)
 
 Important notes:
