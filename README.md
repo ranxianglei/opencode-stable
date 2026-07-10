@@ -73,15 +73,30 @@ This fork tracks **opencode v1.14.41** and applies the following patches:
 | 6 | Trim `todowrite.txt` prompt (8845 → 854 chars) | ~2280 tokens/req |
 | 7 | Trim `task.txt` prompt (3732 → 1158 chars) | ~736 tokens/req |
 | 8 | Trim `default.txt` prompt (8661 → 7638 chars) | ~292 tokens/req |
+| 9 | Dedup `default.txt` (merge artifact: 2 versions concatenated), trim `shell.txt` + `anthropic.txt` | ~1795 tokens/req |
 
-Total token savings: **~3300 tokens per request**.
+Total token savings: **~5100 tokens per request**.
 
 #### New Features
 
 | # | Description |
 |---|-------------|
-| 9 | `pluginAutoInstall` config option + `OPENCODE_DISABLE_PLUGIN_INSTALL` env var to control plugin auto-installation |
-| 10 | `disableQuestionTool` config option, session ID in sidebar, improved todowrite rules |
+| 10 | `pluginAutoInstall` config option + `OPENCODE_DISABLE_PLUGIN_INSTALL` env var to control plugin auto-installation |
+| 11 | `disableQuestionTool` config option, session ID in sidebar, improved todowrite rules |
+| 12 | `options.prompt` model config override — choose which prompt file a model uses (`default`, `anthropic`, `beast`, `gemini`, `gpt`, `kimi`, `codex`, `trinity`). Set in `opencode.json`:
+
+```json
+{
+  "provider": {
+    "glm": {
+      "models": {
+        "glm-5.2": { "options": { "prompt": "anthropic" } }
+      }
+    }
+  }
+}
+```
+Overrides the hardcoded model-id routing in `system.ts`. When not set, falls back to automatic routing by model name. |
 
 ### Agents
 

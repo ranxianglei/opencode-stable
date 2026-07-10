@@ -16,7 +16,21 @@ import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 
+const PROMPT_MAP: Record<string, string> = {
+  default: PROMPT_DEFAULT,
+  anthropic: PROMPT_ANTHROPIC,
+  beast: PROMPT_BEAST,
+  gemini: PROMPT_GEMINI,
+  gpt: PROMPT_GPT,
+  kimi: PROMPT_KIMI,
+  codex: PROMPT_CODEX,
+  trinity: PROMPT_TRINITY,
+}
+
 export function provider(model: Provider.Model) {
+  const promptName = model.options.prompt
+  if (typeof promptName === "string" && promptName in PROMPT_MAP) return [PROMPT_MAP[promptName]]
+
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
     return [PROMPT_BEAST]
   if (model.api.id.includes("gpt")) {
