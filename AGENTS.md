@@ -34,7 +34,7 @@ This is **not** a plugin (cf. `opencode-acp`). It is the full `opencode` CLI, di
 | Field | Value |
 |-------|-------|
 | npm umbrella package | `opencode-stable` |
-| Current published version | `1.14.41` (2026-05-24) |
+| Current published version | `1.14.42` (2026-07-09) |
 | Internal Gitea (origin) | `ssh://git@192.168.10.96:2222/dog/opencode-stable.git` |
 | GitHub mirror | https://github.com/ranxianglei/opencode-stable |
 | Upstream | https://github.com/sst/opencode |
@@ -178,7 +178,7 @@ Verify after build: `opencode --version` must print `1.14.41` (or the pinned ver
 
 ### 3.5 npm Publishing — see Section 5.4 (Pre-Publish Checklist)
 
-The published npm package is **`opencode-stable`** (umbrella) + 9 platform packages `opencode-{platform}-stable`. Publishing is a multi-package, public, semi-irreversible operation — follow §5.4. **Note: the fork-specific publish infrastructure is currently out of sync with upstream scripts — see §4.5.**
+The published npm package is **`opencode-stable`** (umbrella) + 9 platform packages `opencode-{platform}-stable`. Publishing is a multi-package, public, semi-irreversible operation — follow §5.4. The fork-specific publish scripts (`build.ts`, `publish.ts`, `postinstall.mjs`) are correctly configured — see §4.5 for details and upstream-sync caveats.
 
 ---
 
@@ -202,7 +202,7 @@ These are the facts that are NOT in upstream docs and that cost real time to red
 `packages/script/src/index.ts` computes `Script.version`:
 1. `env.OPENCODE_VERSION` — **use this. Always.**
 2. Else, if "preview" channel → `0.0.0-{branch}-{timestamp}`
-3. Else, fetch `https://registry.npmjs.org/opencode-ai/latest` (the **upstream** package) and bump.
+3. Else, fetch `https://registry.npmjs.org/opencode-ai/latest` (the **upstream** package, NOT `opencode-stable`) and bump.
 
 `packages/opencode/script/build.ts` bakes `OPENCODE_VERSION: '${Script.version}'` into the binary.
 
@@ -216,25 +216,27 @@ These are the facts that are NOT in upstream docs and that cost real time to red
 
 When merging `upstream/dev` into the fork:
 - The fork carries deliberate divergences (snapshot fix, run/grace-period fixes, GLM compat). Preserve them.
-- **Upstream syncs have repeatedly overwritten fork-specific publish scripts** (`build.ts`, `publish.ts`, `postinstall.mjs`) — see §4.5. After any upstream merge, verify the `-stable` publish naming is intact before attempting a release.
+- **Upstream syncs have repeatedly overwritten fork-specific publish scripts** (`build.ts`, `publish.ts`, `postinstall.mjs`). The scripts are currently correct (§4.5), but after any upstream merge, verify the `-stable` naming is intact before attempting a release.
 - Resolve conflicts toward keeping fork behavior, then re-apply upstream features.
 
 ### 4.4 Data Safety
 
 `~/.local/share/opencode/opencode.db` is the session history and can exceed 1 GB. It is **never** touched by the build (build only writes `dist/`). Before any destructive git operation, confirm no opencode process is mid-write (check the `-wal` file is quiescent). Backups go to `/tmp/opencode-backup-YYYYMMDD-HHMMSS`.
 
-### 4.5 Publish Infrastructure Status (known broken)
+### 4.5 Publish Infrastructure Status
 
-The fork-specific publish naming (`opencode-stable` umbrella + `opencode-{platform}-stable` platform packages) is **not** what the current scripts produce. The current scripts are upstream's:
+The fork-specific publish scripts are **correctly configured** for the `opencode-stable` npm distribution. The published packages on npm match this shape (verified against `opencode-stable@1.14.41` / `@1.14.42`):
 
-| File | Current (upstream) behavior | Needed for `opencode-stable` |
-|------|------------------------------|------------------------------|
-| `packages/opencode/script/publish.ts` | umbrella = `opencode-ai` (`pkg.name + "-ai"`); also Docker/AUR/Homebrew to anomalyco targets | umbrella = `opencode-stable` |
-| `packages/opencode/script/build.ts` | platform pkg = `opencode-{platform}` (no suffix) | platform pkg = `opencode-{platform}-stable` |
-| `packages/opencode/script/postinstall.mjs` | resolves `opencode-{platform}-{arch}` | must resolve `opencode-{platform}-stable` |
-| `.github/workflows/publish.yml` | gated on `github.repository == 'anomalyco/opencode'` (won't fire here) | fork-specific workflow |
+| File | Fork-specific behavior | Verified |
+|------|------------------------|----------|
+| `packages/opencode/script/build.ts` | Platform pkg name = `{pkg.name}-{platform}-{arch}-stable` (line 187: `name + "-stable"`) | ✅ |
+| `packages/opencode/script/publish.ts` | Umbrella = `opencode-stable` (line 16); skips Windows; drops Docker/AUR/Homebrew | ✅ |
+| `packages/opencode/script/postinstall.mjs` | Resolves `opencode-{platform}-{arch}-stable` (line 27: `base = opencode-${platform}-${arch}-stable`) | ✅ |
 
-**Running the current scripts verbatim would attempt to publish `opencode-ai` (owned by sst → npm rejects) with wrong platform names.** Do NOT publish without first reconstructing the `-stable` naming. See §5.4 and raise the issue before any release.
+**Published shape** (9 optionalDeps, all `-stable` suffix, no Windows):
+`linux-x64`, `linux-x64-baseline`, `linux-x64-musl`, `linux-x64-baseline-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-x64-baseline`, `darwin-arm64`.
+
+**⚠️ Upstream sync danger**: Upstream syncs have repeatedly overwritten these three files with upstream's `opencode-ai` naming. After ANY upstream merge, run `grep -n "stable" packages/opencode/script/build.ts packages/opencode/script/publish.ts packages/opencode/script/postinstall.mjs` — if output is empty or shows `opencode-ai`, the scripts were clobbered and must be restored before publishing.
 
 ### 4.6 Bug Fix History (fork divergences)
 
@@ -266,7 +268,7 @@ The snapshot fix adds `if (!(yield* enabled())) return <default>` guards in 5 fu
 | **NEVER bypass branch protection** | If protection blocks a push, the correct response is a PR — not toggling protection. |
 | **NEVER delete branches/tags without human confirmation** | Preserve work for review. |
 | **NEVER build without `OPENCODE_VERSION`** | Invalidates sessions. See §4.2. |
-| **NEVER run `publish.ts` without verifying `-stable` naming** | Would publish wrong/owned-by-sst packages. See §4.5. |
+| **NEVER run `publish.ts` without verifying `-stable` naming** | Upstream syncs may clobber the scripts. See §4.5. |
 
 ### 5.1.2 Devlog / Issue Tracking
 
@@ -297,9 +299,15 @@ git fetch origin && git status  # MUST show "up to date with 'origin/master'"
 
 If any fails → STOP. Do not proceed.
 
-**Step 1 — Reconstruct fork publish naming (§4.5):**
+**Step 1 — Verify fork publish naming (§4.5):**
 
-Verify/patch `build.ts`, `publish.ts`, `postinstall.mjs` to use `opencode-stable` umbrella + `opencode-{platform}-stable` platform names. The published 1.14.41 shape is the reference:
+The publish scripts (`build.ts`, `publish.ts`, `postinstall.mjs`) are already configured for `opencode-stable`. Verify they haven't been clobbered by an upstream sync:
+
+```bash
+grep -n "stable" packages/opencode/script/build.ts packages/opencode/script/publish.ts packages/opencode/script/postinstall.mjs
+```
+
+Expected: `opencode-stable` umbrella + `opencode-{platform}-{arch}-stable` platform names. The published 1.14.41/1.14.42 shape is the reference:
 - 9 optionalDeps, all `-stable` suffix: `linux-x64`, `linux-x64-baseline`, `linux-x64-musl`, `linux-x64-baseline-musl`, `linux-arm64`, `linux-arm64-musl`, `darwin-x64`, `darwin-x64-baseline`, `darwin-arm64`. **No windows.**
 
 **Step 2 — Build all targets with pinned version:**
