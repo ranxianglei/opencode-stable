@@ -35,8 +35,7 @@ This is **not** a plugin (cf. `opencode-acp`). It is the full `opencode` CLI, di
 |-------|-------|
 | npm umbrella package | `opencode-stable` |
 | Current published version | `1.14.42` (2026-07-09) |
-| Internal Gitea (origin) | `ssh://git@192.168.10.96:2222/dog/opencode-stable.git` |
-| GitHub mirror | https://github.com/ranxianglei/opencode-stable |
+| GitHub | https://github.com/ranxianglei/opencode-stable |
 | Upstream | https://github.com/sst/opencode |
 | License | MIT |
 | Maintainer | ranxianglei |
@@ -186,16 +185,15 @@ The published npm package is **`opencode-stable`** (umbrella) + 9 platform packa
 
 These are the facts that are NOT in upstream docs and that cost real time to rediscover.
 
-### 4.1 Three Remotes
+### 4.1 Remotes
 
 | Remote | URL | Role |
 |--------|-----|------|
-| `origin` | `ssh://git@192.168.10.96:2222/dog/opencode-stable.git` | **Internal Gitea. Primary.** PRs and issues live here. Default branch: `master`. |
-| `github` | `git@github.com:ranxianglei/opencode-stable.git` | Public mirror. Default branch: `dev`. |
+| `github` | `git@github.com:ranxianglei/opencode-stable.git` | **Primary.** PRs and issues live here. Default branch: `master`. |
 | `upstream` | `https://github.com/sst/opencode.git` | sst/opencode. Track and merge from here. Default branch: `dev`. |
 
-- **Working branch on `origin` is `master`** (not `dev`). The existing upstream note "default branch is dev" applies to upstream/github, not to the internal origin.
-- When diffing against upstream, use `upstream/dev` or `origin/dev`. A local `main` ref may not exist.
+- **Working branch is `master`** (not `dev`). The upstream note "default branch is dev" applies to upstream, not to this fork.
+- When diffing against upstream, use `upstream/dev`. A local `main` ref may not exist.
 
 ### 4.2 Version Pinning (THE critical pitfall)
 
@@ -254,7 +252,7 @@ The snapshot fix adds `if (!(yield* enabled())) return <default>` guards in 5 fu
 
 ### 5.1 Before Making Changes
 
-1. Confirm you are on `master` and synced with `origin/master`.
+1. Confirm you are on `master` and synced with `github/master`.
 2. `bun run typecheck` (from the package dir) — no type errors.
 3. Understand whether the change is fork-specific (preserve across syncs) or upstream-tracking.
 4. If touching `build.ts`/`publish.ts`/`postinstall.mjs` → re-read §4.5.
@@ -272,7 +270,7 @@ The snapshot fix adds `if (!(yield* enabled())) return <default>` guards in 5 fu
 
 ### 5.1.2 Devlog / Issue Tracking
 
-Fork issues and PRs are tracked on the internal Gitea (`origin`). Use `tea issues N --repo dog/opencode-stable` and the `awork-reply N dog/opencode-stable` heredoc pattern (every reply starts with `[bot]`). Prefer Gitea PRs over direct pushes.
+Issues and PRs are tracked on GitHub. Use `gh issue list --repo ranxianglei/opencode-stable` and standard GitHub PR workflow.
 
 ### 5.2 After Making Changes
 
@@ -294,7 +292,7 @@ Before every npm publish of `opencode-stable`, ALL steps execute **in order**. P
 ```bash
 git status --porcelain          # MUST be empty
 git branch --show-current       # MUST be master
-git fetch origin && git status  # MUST show "up to date with 'origin/master'"
+git fetch github && git status  # MUST show "up to date with 'github/master'"
 ```
 
 If any fails → STOP. Do not proceed.
