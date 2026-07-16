@@ -1418,7 +1418,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
           for (let i = msgs.length - 1; i >= 0; i--) {
             const msg = msgs[i]
-            if (!lastUser && msg.info.role === "user") lastUser = msg.info
+            // Skip user messages where ALL parts are ignored — they carry no
+            // model-visible input (toModelMessagesEffect strips ignored parts)
+            // but would otherwise be picked up as lastUser, preventing the loop
+            // from exiting and triggering a phantom LLM call with empty input.
+            const isFullyIgnored =
+              msg.info.role === "user" &&
+              msg.parts.length > 0 &&
+              msg.parts.every((part) => part.type === "text" && part.ignored)
+            if (!lastUser && msg.info.role === "user" && !isFullyIgnored) lastUser = msg.info
             if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
             if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
             if (lastUser && lastFinished) break
