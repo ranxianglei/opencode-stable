@@ -69,7 +69,7 @@ exports[`tool parameters JSON Schema (wire shape) edit 1`] = `
       "type": "string",
     },
     "newString": {
-      "description": "The text to replace it with (must be different from oldString)",
+      "description": "The replacement text",
       "type": "string",
     },
     "oldString": {
@@ -77,7 +77,7 @@ exports[`tool parameters JSON Schema (wire shape) edit 1`] = `
       "type": "string",
     },
     "replaceAll": {
-      "description": "Replace all occurrences of oldString (default false)",
+      "description": "Replace all occurrences of oldString",
       "type": "boolean",
     },
   },
@@ -394,7 +394,7 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
   "properties": {
     "format": {
       "default": "markdown",
-      "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+      "description": "Output format (default: markdown)",
       "enum": [
         "text",
         "markdown",
@@ -468,7 +468,7 @@ exports[`tool parameters JSON Schema (wire shape) write 1`] = `
       "type": "string",
     },
     "filePath": {
-      "description": "The absolute path to the file to write (must be absolute, not relative)",
+      "description": "Absolute path to the file to write",
       "type": "string",
     },
   },
