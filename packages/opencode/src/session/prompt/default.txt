@@ -12,7 +12,7 @@ When asked about opencode features, fetch info from https://opencode.ai/docs. Re
 - DO NOT ADD COMMENTS unless asked. Never commit secrets or keys. NEVER commit unless explicitly asked.
 
 # Tasks
-- Plan non-trivial work (2+ steps) with TodoWrite; mark items complete as soon as done.
+- Plan non-trivial work with TodoWrite; mark items complete as soon as done.
 - Search before you change; verify with tests (find the framework — never assume) and run lint/typecheck after.
 - Tool results and user messages may include <system-reminder> tags — system reminders, not user input.
 
