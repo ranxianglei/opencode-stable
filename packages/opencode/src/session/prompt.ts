@@ -1418,7 +1418,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
           for (let i = msgs.length - 1; i >= 0; i--) {
             const msg = msgs[i]
-            if (!lastUser && msg.info.role === "user") lastUser = msg.info
+            // Skip user messages that carry no model-visible input — they would
+            // otherwise be picked up as lastUser, preventing the loop from exiting
+            // and triggering a phantom LLM call with empty input. This mirrors the
+            // strip rules in toModelMessagesEffect: 0-part user msgs are dropped
+            // (message-v2.ts:792) and ignored text parts are stripped (message-v2.ts:802).
+            const isFullyIgnored =
+              msg.info.role === "user" &&
+              (msg.parts.length === 0 ||
+                msg.parts.every((part) => part.type === "text" && part.ignored))
+            if (!lastUser && msg.info.role === "user" && !isFullyIgnored) lastUser = msg.info
             if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
             if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
             if (lastUser && lastFinished) break
