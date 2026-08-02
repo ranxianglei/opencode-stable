@@ -2,7 +2,6 @@ import { Schema } from "effect"
 import DESCRIPTION from "./shell.txt"
 import { PositiveInt } from "@/util/schema"
 import { Global } from "@opencode-ai/core/global"
-import { ShellID } from "./id"
 
 const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
@@ -282,11 +281,6 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits) 
       tmp: Global.Path.tmp,
       workdirSection: selected.workdirSection,
       commandSection: selected.commandSection,
-      gitCommands: selected.gitCommands,
-      toolName: ShellID.ToolID,
-      gitCommandRestriction: selected.gitCommandRestriction,
-      createPrInstruction: selected.createPrInstruction,
-      createPrExample: selected.createPrExample,
     }),
     parameters: parameterSchema(selected.parameterDescription),
   }
