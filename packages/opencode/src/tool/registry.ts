@@ -190,9 +190,10 @@ export const layer: Layer.Layer<
         }
 
         const cfg = yield* config.get()
-        const questionEnabled =
-          !cfg.disableQuestionTool &&
-          (["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL)
+        // The question tool is off by default. Modern models answer inline instead of
+        // presenting a multiple-choice tool call, which is lower friction. Enable explicitly
+        // via config (`disableQuestionTool: false`) or the OPENCODE_ENABLE_QUESTION_TOOL flag.
+        const questionEnabled = !cfg.disableQuestionTool && Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
