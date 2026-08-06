@@ -1,1 +1,1 @@
-Load a specialized skill that matches the current task. The skill name must match one listed in the system prompt.
+Load a specialized skill that matches the current task. The skill name must match one listed below.
