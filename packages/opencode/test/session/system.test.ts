@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
@@ -52,18 +51,23 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
-  it.effect("skills output is sorted by name and stable across calls", () =>
+  it.effect("skills section is a no-op (Pi-style: skills are described in the skill tool, not the system prompt)", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
-      const first = yield* prompt.skills(build)
-      const second = yield* prompt.skills(build)
-      const output = first ?? (yield* Effect.fail(new NamedError.Unknown({ message: "missing skills output" })))
+      expect(yield* prompt.skills(build)).toBeUndefined()
+    }),
+  )
+
+  it.effect("Skill.fmt renders the skill list sorted by name and stable across calls", () =>
+    Effect.gen(function* () {
+      const first = Skill.fmt(skills, { verbose: false })
+      const second = Skill.fmt(skills, { verbose: false })
 
       expect(first).toBe(second)
 
-      const alpha = output.indexOf("<name>alpha-skill</name>")
-      const middle = output.indexOf("<name>middle-skill</name>")
-      const zeta = output.indexOf("<name>zeta-skill</name>")
+      const alpha = first.indexOf("**alpha-skill**")
+      const middle = first.indexOf("**middle-skill**")
+      const zeta = first.indexOf("**zeta-skill**")
 
       expect(alpha).toBeGreaterThan(-1)
       expect(middle).toBeGreaterThan(alpha)
