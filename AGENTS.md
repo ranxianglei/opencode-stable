@@ -243,6 +243,7 @@ The fork-specific publish scripts are **correctly configured** for the `opencode
 | snapshot-disabled | `src/snapshot/index.ts` (+5 lines) | Honor `snapshot:false` in `restore`/`revert`/`patch`/`diff`/`diffFull` via early-return guards | `e42618461` (cherry-pick of `abe8bf533`, PR #3) |
 | run background-exit | `src/session/run.ts` | Background agent exit handling | PR #4 (grace-period) |
 | grace-period multi-bg | `src/session/run.ts` | Grace period for multiple background agents | PR #4 |
+| id-wraparound | `src/id/id.ts`, `src/session/{prompt,revert,session}.ts`, `src/session/message-v2.ts` (`compare`), `src/session/projectors-next.ts` | Legacy 48-bit ID layout (`ts*0x1000+counter`) wrapped on 2026-08-14T11:19:55Z, making new IDs sort below pre-wrap IDs and silently killing prompt-loop replies in existing sessions. Fix: (a) new ID layout `FLAG \| ((ts-EPOCH)<<4 \| counter)` (bit 47 flag, epoch 2026-01-01, monotonic ~278y, decodable in `timestamp()`); (b) all message-order decisions now use `MessageV2.compare` (time first, ID tie-break) or SQL `(time_created, id)` ordering. Preserve the `compare` helper and the `EPOCH`/`FLAG` constants across upstream syncs. | this repo, `fix(id): ...` |
 
 The snapshot fix adds `if (!(yield* enabled())) return <default>` guards in 5 functions. Verify 7 total `enabled()` guards exist (5 new + 2 pre-existing) after any upstream merge.
 
