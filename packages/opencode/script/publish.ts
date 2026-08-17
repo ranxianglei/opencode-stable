@@ -42,7 +42,17 @@ async function publish(pkgDir: string, name: string, version: string) {
     return
   }
   await $`bun pm pack`.cwd(pkgDir)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(pkgDir)
+  const res = await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(pkgDir).nothrow()
+  // E403 "cannot publish over the previously published versions" = a concurrent publisher
+  // (manual publish racing CI) won between our `published()` check and this PUT — ok.
+  if (res.exitCode !== 0) {
+    if (await published(name, version)) {
+      console.log(`publish raced for ${name}@${version}, but it is on the registry — ok`)
+      return
+    }
+    console.error(res.stderr.toString())
+    throw new Error(`npm publish failed for ${name}@${version}`)
+  }
 }
 
 // Collect platform binaries built by build.ts. Each dist/<dir>/package.json
