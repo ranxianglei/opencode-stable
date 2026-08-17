@@ -34,7 +34,7 @@ This is **not** a plugin (cf. `opencode-acp`). It is the full `opencode` CLI, di
 | Field | Value |
 |-------|-------|
 | npm umbrella package | `opencode-stable` |
-| Current published version | `1.14.42` (2026-07-09) |
+| Current published version | `1.14.46` (2026-08-17) |
 | GitHub | https://github.com/ranxianglei/opencode-stable |
 | Upstream | https://github.com/sst/opencode |
 | License | MIT |
@@ -148,11 +148,11 @@ bun run dev                              # dev mode (packages/opencode)
 ```bash
 # Local single-platform build (current host only) — for self-install:
 cd packages/opencode
-OPENCODE_VERSION=1.14.41 bun run build -- --single
+OPENCODE_VERSION=1.14.46 bun run build -- --single
 
 # Full multi-platform build (all 12 targets, cross-compile) — for npm publish:
 cd packages/opencode
-OPENCODE_VERSION=1.14.41 bun run build
+OPENCODE_VERSION=1.14.46 bun run build
 ```
 
 Build flags: `--single` (current platform only), `--baseline`, `--skip-install`, `--sourcemaps`, `--skip-embed-web-ui`.
@@ -173,7 +173,7 @@ Output: `dist/{pkg-name}/bin/opencode` per target.
 - Rebuild is safe while opencode is running: Linux swaps the inode; running sessions keep the old binary, new launches pick up the new one.
 - **Build only writes `dist/`. The data dir (`~/.local/share/opencode/`) is never touched.** Session history is safe across rebuilds.
 
-Verify after build: `opencode --version` must print `1.14.41` (or the pinned version). If it prints `0.0.0-master-...`, the build forgot `OPENCODE_VERSION` — rebuild it.
+Verify after build: `opencode --version` must print `1.14.46` (or the current fork release version). If it prints `0.0.0-master-...`, the build forgot `OPENCODE_VERSION` — rebuild it.
 
 ### 3.5 npm Publishing — see Section 5.4 (Pre-Publish Checklist)
 
@@ -204,11 +204,11 @@ These are the facts that are NOT in upstream docs and that cost real time to red
 
 `packages/opencode/script/build.ts` bakes `OPENCODE_VERSION: '${Script.version}'` into the binary.
 
-**Consequence**: building without `OPENCODE_VERSION=1.14.41` produces `0.0.0-master-{date}`, which:
+**Consequence**: building without `OPENCODE_VERSION=1.14.46` produces `0.0.0-master-{date}`, which:
 - Makes **all existing sessions invalid** (sessions are keyed by the baked version).
 - Reports a nonsense version to `opencode --version`.
 
-**Rule: every build MUST set `OPENCODE_VERSION` to the pinned fork version (`1.14.41`).** No exceptions.
+**Rule: every build MUST set `OPENCODE_VERSION` to the current fork release version (`1.14.46`).** No exceptions.
 
 ### 4.3 Upstream Sync Discipline
 
@@ -276,7 +276,7 @@ Issues and PRs are tracked on GitHub. Use `gh issue list --repo ranxianglei/open
 ### 5.2 After Making Changes
 
 1. `bun run typecheck` passes (package dir).
-2. If CLI behavior changed: rebuild with `OPENCODE_VERSION=1.14.41 bun run build -- --single` and smoke-test `opencode --version`.
+2. If CLI behavior changed: rebuild with `OPENCODE_VERSION=1.14.46 bun run build -- --single` and smoke-test `opencode --version`.
 3. Run relevant tests from the package dir.
 4. If the change must survive upstream sync, document it in §4.6.
 
