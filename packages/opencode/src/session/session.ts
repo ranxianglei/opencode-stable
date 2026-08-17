@@ -652,9 +652,14 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       })
       const msgs = yield* messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
+      const boundary = input.messageID ? msgs.find((m) => m.info.id === input.messageID) : undefined
 
       for (const msg of msgs) {
-        if (input.messageID && msg.info.id >= input.messageID) break
+        if (
+          input.messageID &&
+          (boundary ? MessageV2.compare(msg.info, boundary.info) >= 0 : msg.info.id >= input.messageID)
+        )
+          break
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
 

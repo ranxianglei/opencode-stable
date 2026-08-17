@@ -591,6 +591,17 @@ export const Info = Object.assign(_Info, {
 })
 export type Info = User | Assistant
 
+/**
+ * Order messages by creation time, tie-breaking by ID. IDs must only be
+ * compared within the same millisecond (same-ms IDs share a layout cycle);
+ * across the 48-bit ID wraparound of 2026-08-14 lexicographic ID order is
+ * inverted, so time decides first.
+ */
+export function compare(a: Info, b: Info): number {
+  if (a.time.created !== b.time.created) return a.time.created - b.time.created
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
 const UpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
   info: _Info,
