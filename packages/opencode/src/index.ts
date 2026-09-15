@@ -30,8 +30,6 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
-import path from "path"
-import { Global } from "@opencode-ai/core/global"
 import { JsonMigration } from "@/storage/json-migration"
 import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
@@ -115,8 +113,9 @@ const cli = yargs(args)
       run_id: processMetadata.runID,
     })
 
-    const marker = path.join(Global.Path.data, "opencode.db")
-    if (!(await Filesystem.exists(marker))) {
+    // Must track the real DB file (OPENCODE_DB / channel naming); a hardcoded opencode.db re-runs the migration on every startup
+    const marker = Database.Path
+    if (marker !== ":memory:" && !(await Filesystem.exists(marker))) {
       const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
       const width = 36
