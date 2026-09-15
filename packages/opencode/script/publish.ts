@@ -30,8 +30,12 @@ npm i -g opencode-stable
 MIT — same as upstream [opencode](https://github.com/sst/opencode).
 `
 
-async function published(name: string, version: string) {
-  return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
+async function published(name: string, version: string, retries = 1) {
+  for (let i = 0; i < retries; i++) {
+    if ((await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0) return true
+    if (i < retries - 1) await new Promise((resolve) => setTimeout(resolve, 2000 * (i + 1)))
+  }
+  return false
 }
 
 async function publish(pkgDir: string, name: string, version: string) {
@@ -46,11 +50,14 @@ async function publish(pkgDir: string, name: string, version: string) {
   // E403 "cannot publish over the previously published versions" = a concurrent publisher
   // (manual publish racing CI) won between our `published()` check and this PUT — ok.
   if (res.exitCode !== 0) {
-    if (await published(name, version)) {
+    const err = res.stderr.toString()
+    // npm's own conflict response proves the version exists server-side, even while
+    // `npm view` still 404s during the "being processed" propagation window.
+    if (err.includes("cannot publish over the previously published versions") || (await published(name, version, 3))) {
       console.log(`publish raced for ${name}@${version}, but it is on the registry — ok`)
       return
     }
-    console.error(res.stderr.toString())
+    console.error(err)
     throw new Error(`npm publish failed for ${name}@${version}`)
   }
 }
