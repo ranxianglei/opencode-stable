@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { dirname, join, relative, resolve as pathResolve } from "path"
+import { dirname, isAbsolute, join, relative, resolve as pathResolve } from "path"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
@@ -232,13 +232,18 @@ export namespace AppFileSystem {
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
   }
 
+  // On Windows, relative() between paths on different roots/drives returns an absolute path
+  // (no ".." prefix), so it must be treated as outside rather than contained.
+  export function outside(parent: string, child: string) {
+    const rel = relative(parent, child)
+    return isAbsolute(rel) || rel.startsWith("..")
+  }
+
   export function overlaps(a: string, b: string) {
-    const relA = relative(a, b)
-    const relB = relative(b, a)
-    return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
+    return !outside(a, b) || !outside(b, a)
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    return !outside(parent, child)
   }
 }

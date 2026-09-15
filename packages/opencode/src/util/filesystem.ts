@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { realpathSync } from "fs"
-import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
+import { dirname, isAbsolute, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "@opencode-ai/core/util/glob"
@@ -155,14 +155,19 @@ export function windowsPath(p: string): string {
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
   )
 }
+// On Windows, relative() between paths on different roots/drives returns an absolute path
+// (no ".." prefix), so it must be treated as outside rather than contained.
+export function outside(parent: string, child: string) {
+  const rel = relative(parent, child)
+  return isAbsolute(rel) || rel.startsWith("..")
+}
+
 export function overlaps(a: string, b: string) {
-  const relA = relative(a, b)
-  const relB = relative(b, a)
-  return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
+  return !outside(a, b) || !outside(b, a)
 }
 
 export function contains(parent: string, child: string) {
-  return !relative(parent, child).startsWith("..")
+  return !outside(parent, child)
 }
 
 export async function findUp(
