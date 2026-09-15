@@ -236,6 +236,8 @@ The fork-specific publish scripts are **correctly configured** for the `opencode
 
 **⚠️ Upstream sync danger**: Upstream syncs have repeatedly overwritten these three files with upstream's `opencode-ai` naming. After ANY upstream merge, run `grep -n "stable" packages/opencode/script/build.ts packages/opencode/script/publish.ts packages/opencode/script/postinstall.mjs` — if output is empty or shows `opencode-ai`, the scripts were clobbered and must be restored before publishing.
 
+`.github/workflows/publish-stable.yml` is also fork-specific (the upstream repo has no such workflow). It carries the auto-publish gate described in §5.4 — merging a release PR into `master` publishes automatically; do not delete its master-push trigger or version cross-check on upstream syncs.
+
 ### 4.6 Bug Fix History (fork divergences)
 
 | Fix | Location | What it does | Commit / PR |
@@ -288,6 +290,8 @@ Source changes under `packages/opencode/src/` should be reviewed for: correctnes
 ### 5.4 Pre-Publish Checklist (MANDATORY)
 
 Before every npm publish of `opencode-stable`, ALL steps execute **in order**. Publishing is public and semi-irreversible (10 packages: 1 umbrella + 9 platform binaries).
+
+**Auto-publish path (since 2026-09-15):** `.github/workflows/publish-stable.yml` also triggers on push to `master`. It publishes ONLY when the HEAD commit is a release merge — title matches `chore: bump version to X.Y.Z`, `chore: release opencode-stable X.Y.Z`, `release: vX.Y.Z`, or a standard merge of a branch named `YYYY-MM-DD_release-v?X.Y.Z` — AND the detected version equals `packages/opencode/package.json` (mismatch = hard fail, nothing published). Any other master merge is skipped. In this mode CI also auto-creates/pushes the `vX.Y.Z` tag and comments the published version back on the merged PR. The tag-push (`v*`) and `workflow_dispatch(version)` paths remain as manual fallbacks. Steps 0–1 below therefore apply to the *release commit* you prepare; CI re-verifies them at publish time.
 
 **Step 0 — Git state (must pass first):**
 
