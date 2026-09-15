@@ -104,6 +104,10 @@ describe("pty", () => {
   })
 
   test("treats in-place socket data mutation as the same connection", async () => {
+    // On Windows, a write immediately after spawn races ConPTY/conhost bring-up, so `cat`'s echo
+    // is not reliably back within the fixed sleep below (see issue #22). Skipped like pty-session.test.ts.
+    if (process.platform === "win32") return
+
     await using dir = await tmpdir({ git: true })
 
     await WithInstance.provide({
