@@ -4,7 +4,7 @@ OS: ${os}, Shell: ${shell}
 
 ${workdirSection}
 
-Use `${tmp}` for temporary work outside the workspace (pre-created and pre-approved).
+Prefer keeping temporary files inside the workspace (e.g. a `.tmp/` directory under the project root). Only if you must write outside the workspace, use `${tmp}` (pre-created and pre-approved).
 
 This tool is for terminal operations (git, build, test, etc.). For file operations use the dedicated tools: Read, Edit, Write, Glob, Grep.
 
