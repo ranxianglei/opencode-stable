@@ -17,6 +17,7 @@ import { or } from "drizzle-orm"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import * as ProviderError from "@/provider/error"
 import { iife } from "@/util/iife"
+import { isEmptyDataUrl } from "@/util/data-url"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
@@ -808,7 +809,6 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "user",
         parts: [],
       }
-      result.push(userMessage)
       for (const part of msg.parts) {
         if (part.type === "text" && !part.ignored)
           userMessage.parts.push({
@@ -822,7 +822,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               type: "text",
               text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
             })
-          } else {
+          } else if (!isEmptyDataUrl(part.url)) {
+            // Payload-less data URLs ("data:<mime>;base64,") are rejected by strict providers
+            // (GLM error 1210) and permanently poison the session on replay; drop them.
             userMessage.parts.push({
               type: "file",
               url: part.url,
@@ -845,6 +847,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
+      if (userMessage.parts.length > 0) result.push(userMessage)
     }
 
     if (msg.info.role === "assistant") {
@@ -900,7 +903,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             const outputText = part.state.time.compacted
               ? "[Old tool result content cleared]"
               : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+            // Drop payload-less data URLs from stored history so already-poisoned sessions keep working.
+            const attachments =
+              part.state.time.compacted || options?.stripMedia
+                ? []
+                : (part.state.attachments ?? []).filter((a) => !isEmptyDataUrl(a.url))
 
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message

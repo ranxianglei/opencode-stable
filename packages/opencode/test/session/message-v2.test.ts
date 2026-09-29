@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
-import { MessageV2 } from "../../src/session/message-v2"
+import { MessageV2, SYNTHETIC_ATTACHMENT_PROMPT } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
@@ -358,6 +358,98 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     ])
+  })
+
+  test("drops empty data URL attachments from tool results (issue #31 GLM 1210)", async () => {
+    const glmModel: Provider.Model = {
+      ...model,
+      id: ModelID.make("glm-4.5"),
+      providerID: ProviderID.make("zai"),
+      api: {
+        id: "glm-4.5",
+        url: "https://api.z.ai/api/coding/paas/v4",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    }
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/screenshot.jpg" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-1"),
+                  type: "file",
+                  mime: "image/jpeg",
+                  url: "data:image/jpeg;base64,",
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, glmModel)
+    const json = JSON.stringify(result)
+    expect(json).not.toContain(SYNTHETIC_ATTACHMENT_PROMPT)
+    expect(json).not.toContain("base64,")
+    const tool = result.find((m) => m.role === "tool")
+    expect(tool?.content[0]).toMatchObject({
+      type: "tool-result",
+      toolCallId: "call-1",
+      toolName: "read",
+      output: { type: "text", value: "Image read successfully" },
+    })
+  })
+
+  test("skips user file parts with empty data URLs (issue #31)", async () => {
+    const filePart: MessageV2.FilePart = {
+      ...basePart("m-user", "p1"),
+      type: "file",
+      mime: "image/jpeg",
+      filename: "screenshot.jpg",
+      url: "data:image/jpeg;base64,",
+    }
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("m-user"),
+        parts: [filePart],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("preserves jpeg tool-result media for anthropic models", async () => {
