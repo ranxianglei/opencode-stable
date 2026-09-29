@@ -499,3 +499,28 @@ describe("tool.read binary detection", () => {
     }),
   )
 })
+
+describe("tool.read zero-byte media files", () => {
+  it.live("returns a text hint instead of an attachment for a 0-byte image", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "screenshot.jpg"), "")
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "screenshot.jpg") })
+      expect(result.attachments).toBeUndefined()
+      expect(result.output).toContain("(file is empty (0 bytes))")
+      expect(result.metadata.truncated).toBe(false)
+    }),
+  )
+
+  it.live("returns a text hint instead of an attachment for a 0-byte pdf", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "doc.pdf"), "")
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "doc.pdf") })
+      expect(result.attachments).toBeUndefined()
+      expect(result.output).toContain("(file is empty (0 bytes))")
+    }),
+  )
+})

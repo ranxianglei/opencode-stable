@@ -221,6 +221,22 @@ export const ReadTool = Tool.define(
 
       if (isImage || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)
+        // Zero-byte files produce a payload-less data URL ("data:<mime>;base64,"), which strict
+        // providers reject (GLM error 1210) and which permanently poisons the session on replay.
+        if (bytes.length === 0) {
+          const msg = "file is empty (0 bytes)"
+          return {
+            title,
+            output: [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n", "", `(${msg})`, "</content>"].join(
+              "\n",
+            ),
+            metadata: {
+              preview: msg,
+              truncated: false,
+              loaded: loaded.map((item) => item.filepath),
+            },
+          }
+        }
         const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
         return {
           title,
