@@ -147,10 +147,9 @@ describe("tool.read external_directory permission", () => {
 
         const { items, next } = asks()
         const target = path.join(dir, "test.txt")
-        const alt = target
-          .replace(/^[A-Za-z]:/, "")
-          .replaceAll("\\", "/")
-          .toLowerCase()
+        // Keep the drive letter: normalizePath() resolves drive-less paths against the process cwd, and on
+        // windows-latest cwd is on D: while %TEMP% is on C: (#24) — a drive-less variant would be phantom.
+        const alt = target.replaceAll("\\", "/").toLowerCase()
 
         yield* exec(dir, { filePath: alt }, next)
         const read = items.find((item) => item.permission === "read")
