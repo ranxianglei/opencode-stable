@@ -1,5 +1,5 @@
 import { type ChildProcess } from "child_process"
-import launch from "cross-spawn"
+import { safeLaunch } from "@opencode-ai/core/cross-spawn-safe"
 import { buffer } from "node:stream/consumers"
 import { errorMessage } from "./error"
 
@@ -59,7 +59,7 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
   if (cmd.length === 0) throw new Error("Command is required")
   opts.abort?.throwIfAborted()
 
-  const proc = launch(cmd[0], cmd.slice(1), {
+  const proc = safeLaunch(cmd[0], cmd.slice(1), {
     cwd: opts.cwd,
     shell: opts.shell,
     env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,

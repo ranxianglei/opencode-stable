@@ -126,6 +126,50 @@ describe("cross-spawn spawner", () => {
     )
   })
 
+  describe("cwd safety (#37)", () => {
+    fx.effect(
+      "opts out of cross-spawn's temporary chdir for the duration of launch",
+      Effect.gen(function* () {
+        // cross-spawn@7 chdirs to the spawn target while resolving the command and restores
+        // in an UNGUARDED finally (Windows-only path — lib/parse.js returns early off-Windows);
+        // if the captured cwd vanished meanwhile the process is left stuck there (the unit(windows)
+        // drift). safeLaunch opts out via `process.chdir.disabled`; assert that flag is switched on
+        // around the real launch and restored afterwards, and that spawning still works.
+        const recorded: Array<boolean | undefined> = []
+        let current: boolean | undefined
+        const realChdir = process.chdir
+        // no-op body: with the fix active cross-spawn never chdirs during our launch, so this
+        // is only swapped in to observe the `disabled` flag the fix toggles around the launch.
+        const fakeChdir = (() => {}) as typeof process.chdir & { disabled?: boolean }
+        Object.defineProperty(fakeChdir, "disabled", {
+          configurable: true,
+          enumerable: false,
+          get: () => current,
+          set: (value: boolean | undefined) => {
+            recorded.push(value)
+            current = value
+          },
+        })
+        process.chdir = fakeChdir
+        try {
+          const to = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "cross-spawn-safe-to-")))
+          try {
+            const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+              svc.string(ChildProcess.make(process.execPath, ["-e", 'process.stdout.write("ok")'], { cwd: to })),
+            )
+            expect(out).toBe("ok")
+          } finally {
+            yield* Effect.promise(() => fs.rm(to, { recursive: true, force: true }).catch(() => undefined))
+          }
+        } finally {
+          process.chdir = realChdir
+        }
+        expect(recorded).toContain(true)
+        expect(current).toBeUndefined()
+      }),
+    )
+  })
+
   describe("env option", () => {
     fx.effect(
       "passes environment variables with extendEnv",
