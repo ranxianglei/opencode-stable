@@ -6,10 +6,36 @@ import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll } from "bun:test"
 
+// Issue #35: bun's junit reporter opens --reporter-outfile relative to
+// process.cwd() at exit; a leaked chdir into a later-deleted tmp dir makes the
+// report write fail with ENOENT (Windows CI). Trap chdir with its stack and
+// restore the initial cwd at teardown.
+const initialCwd = process.cwd()
+const originalChdir = process.chdir
+process.chdir = (directory: string) => {
+  console.error(
+    `[test-preload] process.chdir("${directory}") called from "${process.cwd()}"; will restore "${initialCwd}" after tests\n${new Error("chdir call stack").stack}`,
+  )
+  return originalChdir.call(process, directory)
+}
+
 // Set XDG env vars FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(async () => {
+  if (process.cwd() !== initialCwd) {
+    console.error(`[test-preload] cwd drift detected at teardown: "${process.cwd()}" != initial "${initialCwd}"; restoring`)
+    try {
+      originalChdir.call(process, initialCwd)
+    } catch (error) {
+      console.error("[test-preload] failed to restore cwd:", error)
+    }
+  }
+  if (process.env["CI"]) {
+    const artifactsDir = path.join(initialCwd, ".artifacts", "unit")
+    const artifactsExist = await fs.stat(artifactsDir).then(() => true, () => false)
+    if (!artifactsExist) console.error(`[test-preload] warning: ${artifactsDir} missing at teardown; junit report write will fail`)
+  }
   const { Database } = await import("../src/storage/db")
   Database.close()
   const busy = (error: unknown) =>
