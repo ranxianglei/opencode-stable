@@ -46,36 +46,74 @@ function chunkTimeoutMs(): number | undefined {
   return LLM_CHUNK_TIMEOUT_DEFAULT
 }
 
-function nextWithTimeout<T>(iter: AsyncIterator<T>, ctrl: AbortController, timeoutMs: number): Promise<IteratorResult<T>> {
-  return new Promise((resolve, reject) => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    iter.next().then(
-      (r) => {
+// Per-chunk silence watchdog. Deliberately a hand-written iterator, not an
+// async generator: an async generator suspended at `await` defers `.return()`
+// until the awaited promise settles, so cancelling a session while waiting on
+// a stalled endpoint would deadlock (the abort that unblocks the pending read
+// runs in the scope finalizer, which is ordered after iterable finalization).
+function watchChunks<T>(source: AsyncIterable<T>, ctrl: AbortController, timeoutMs: number): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      const iter = source[Symbol.asyncIterator]()
+      let finished = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let pending: { resolve: (r: IteratorResult<T>) => void; reject: (e: unknown) => void } | undefined
+      const clearTimer = () => {
         if (timer) clearTimeout(timer)
-        resolve(r)
-      },
-      (e) => {
-        if (timer) clearTimeout(timer)
-        reject(e)
-      },
-    )
-    timer = setTimeout(() => {
-      log.warn("model response timeout", { timeoutMs })
-      // The SDK ends an aborted stream cleanly instead of surfacing the abort as an
-      // error, so the watchdog must reject itself to make the stall observable.
-      ctrl.abort()
-      reject(new DOMException(`Model response timed out after ${timeoutMs}ms without data`, "TimeoutError"))
-    }, timeoutMs)
-    timer.unref?.()
-  })
-}
-
-async function* watchChunks<T>(source: AsyncIterable<T>, ctrl: AbortController, timeoutMs: number): AsyncGenerator<T> {
-  const iter = source[Symbol.asyncIterator]()
-  while (true) {
-    const r = await nextWithTimeout(iter, ctrl, timeoutMs)
-    if (r.done) return
-    yield r.value
+        timer = undefined
+      }
+      return {
+        next() {
+          if (finished) return Promise.resolve({ value: undefined, done: true } as IteratorResult<T>)
+          return new Promise<IteratorResult<T>>((resolve, reject) => {
+            pending = {
+              resolve: (r) => {
+                pending = undefined
+                clearTimer()
+                resolve(r)
+              },
+              reject: (e) => {
+                pending = undefined
+                clearTimer()
+                reject(e)
+              },
+            }
+            iter.next().then(
+              (r) => pending?.resolve(r),
+              (e) => pending?.reject(e),
+            )
+            timer = setTimeout(() => {
+              log.warn("model response timeout", { timeoutMs })
+              // The SDK ends an aborted stream cleanly instead of surfacing the abort as an
+              // error, so the watchdog must reject itself to make the stall observable.
+              ctrl.abort()
+              pending?.reject(new DOMException(`Model response timed out after ${timeoutMs}ms without data`, "TimeoutError"))
+            }, timeoutMs)
+            timer.unref?.()
+          })
+        },
+        return(value?: unknown) {
+          finished = true
+          clearTimer()
+          if (pending) {
+            const p = pending
+            pending = undefined
+            p.resolve({ value: undefined, done: true })
+          }
+          return iter.return ? iter.return(value) : Promise.resolve({ value: undefined, done: true } as IteratorResult<T>)
+        },
+        throw(e: unknown) {
+          finished = true
+          clearTimer()
+          if (pending) {
+            const p = pending
+            pending = undefined
+            p.reject(e)
+          }
+          return iter.throw ? iter.throw(e) : Promise.reject(e)
+        },
+      }
+    },
   }
 }
 
