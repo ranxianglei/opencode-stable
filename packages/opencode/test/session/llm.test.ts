@@ -15,6 +15,7 @@ import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionRetry } from "../../src/session/retry"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 
@@ -1270,4 +1271,88 @@ describe("session.llm.stream", () => {
       },
     })
   })
+
+  test("stream fails fast and classifies as retryable when the provider never responds", async () => {
+    const hangServer = Bun.serve({
+      port: 0,
+      fetch: () => new Promise<Response>(() => {}),
+    })
+    process.env.OPENCODE_LLM_CHUNK_TIMEOUT_MS = "500"
+    try {
+      const providerID = "vivgrid"
+      const modelID = "gemini-3.1-pro-preview"
+      const fixture = await loadFixture(providerID, modelID)
+      const model = fixture.model
+
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              enabled_providers: [providerID],
+              provider: {
+                [providerID]: {
+                  options: {
+                    apiKey: "test-key",
+                    baseURL: `${hangServer.url.origin}/v1`,
+                  },
+                },
+              },
+            }),
+          )
+        },
+      })
+
+      await WithInstance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+          const sessionID = SessionID.make("session-timeout-test")
+          const agent = {
+            name: "test",
+            mode: "primary",
+            options: {},
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+            temperature: 0.4,
+            topP: 0.8,
+          } satisfies Agent.Info
+
+          const user = {
+            id: MessageID.make("user-1"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderID.make(providerID), modelID: resolved.id, variant: "high" },
+          } satisfies MessageV2.User
+
+          const started = Date.now()
+          const rejected = await drain({
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          }).then(() => undefined, (e: unknown) => e)
+
+          expect(rejected).toBeDefined()
+          expect(Date.now() - started).toBeLessThan(30_000)
+
+          const classified = MessageV2.fromError(rejected, { providerID: ProviderID.make(providerID) })
+          expect(MessageV2.APIError.isInstance(classified)).toBe(true)
+          if (!MessageV2.APIError.isInstance(classified)) return
+          expect(classified.data.isRetryable).toBe(true)
+          expect(classified.data.metadata?.code).toBe("TIMEOUT")
+          expect(classified.data.message).toInclude("timed out")
+          expect(SessionRetry.retryable(classified)).toBeDefined()
+        },
+      })
+    } finally {
+      delete process.env.OPENCODE_LLM_CHUNK_TIMEOUT_MS
+      void hangServer.stop()
+    }
+  }, 60_000)
 })

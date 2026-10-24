@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Layer, Schedule } from "effect"
+import { Effect, Exit, Layer, Schedule } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -110,6 +110,32 @@ describe("session.retry.delay", () => {
           attempt: 2,
           message: "boom",
         })
+      }),
+    ),
+  )
+
+  it.live("policy stops scheduling after RETRY_MAX_ATTEMPTS attempts", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        // processor.ts squashes stream defects into typed failures before retrying, so model the post-squash state here
+        let attempts = 0
+        const failing = Effect.gen(function* () {
+          attempts++
+          yield* Effect.fail(apiError({ "retry-after-ms": "0" }))
+        })
+        const exit = yield* failing
+          .pipe(
+            Effect.retry(
+              SessionRetry.policy({
+                parse: (err) => MessageV2.APIError.Schema.parse(err),
+                set: () => Effect.void,
+              }),
+            ),
+            Effect.exit,
+          )
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(attempts).toBe(SessionRetry.RETRY_MAX_ATTEMPTS)
       }),
     ),
   )

@@ -29,6 +29,56 @@ const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 type Result = Awaited<ReturnType<typeof streamText>>
 
+// Max silence window (ms) tolerated on the model response stream. It covers both
+// waiting for the first byte (connection accepted but no response ever arrives)
+// and gaps between chunks while streaming; fetch has no default headers/body
+// timeout, so a dead endpoint otherwise stalls the session forever. Set
+// OPENCODE_LLM_CHUNK_TIMEOUT_MS=0 to disable; other values override the default.
+const LLM_CHUNK_TIMEOUT_DEFAULT = 300_000
+
+function chunkTimeoutMs(): number | undefined {
+  const raw = process.env.OPENCODE_LLM_CHUNK_TIMEOUT_MS
+  if (raw !== undefined) {
+    const parsed = Number(raw)
+    if (parsed === 0) return undefined
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return LLM_CHUNK_TIMEOUT_DEFAULT
+}
+
+function nextWithTimeout<T>(iter: AsyncIterator<T>, ctrl: AbortController, timeoutMs: number): Promise<IteratorResult<T>> {
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    iter.next().then(
+      (r) => {
+        if (timer) clearTimeout(timer)
+        resolve(r)
+      },
+      (e) => {
+        if (timer) clearTimeout(timer)
+        reject(e)
+      },
+    )
+    timer = setTimeout(() => {
+      log.warn("model response timeout", { timeoutMs })
+      // The SDK ends an aborted stream cleanly instead of surfacing the abort as an
+      // error, so the watchdog must reject itself to make the stall observable.
+      ctrl.abort()
+      reject(new DOMException(`Model response timed out after ${timeoutMs}ms without data`, "TimeoutError"))
+    }, timeoutMs)
+    timer.unref?.()
+  })
+}
+
+async function* watchChunks<T>(source: AsyncIterable<T>, ctrl: AbortController, timeoutMs: number): AsyncGenerator<T> {
+  const iter = source[Symbol.asyncIterator]()
+  while (true) {
+    const r = await nextWithTimeout(iter, ctrl, timeoutMs)
+    if (r.done) return
+    yield r.value
+  }
+}
+
 // Avoid re-instantiating remeda's deep merge types in this hot LLM path; the runtime behavior is still mergeDeep.
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
   mergeDeep(target, source ?? {}) as Record<string, any>
@@ -426,7 +476,9 @@ const live: Layer.Layer<
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            return Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
+            const timeoutMs = chunkTimeoutMs()
+            const source = timeoutMs === undefined ? result.fullStream : watchChunks(result.fullStream, ctrl, timeoutMs)
+            return Stream.fromAsyncIterable(source, (e) => (e instanceof Error ? e : new Error(String(e))))
           }),
         ),
       )

@@ -1178,6 +1178,20 @@ export function fromError(
           cause: e,
         },
       ).toObject()
+    case e instanceof DOMException && e.name === "TimeoutError":
+      // Emitted by the LLM stream silence watchdog (session/llm.ts) when the
+      // endpoint stops sending data. Retryable like other transient failures.
+      return new APIError(
+        {
+          message: e.message,
+          isRetryable: true,
+          metadata: {
+            code: "TIMEOUT",
+            message: e.message,
+          },
+        },
+        { cause: e },
+      ).toObject()
     case OutputLengthError.isInstance(e):
       return e
     case LoadAPIKeyError.isInstance(e):

@@ -673,8 +673,14 @@ export const RunCommand = effectCmd({
           process.exit(1)
         })
 
+        // The final assistant message carries .error when the run failed
+        // (e.g. provider errors after retries exhausted). Transient errors that
+        // were recovered later (e.g. context overflow followed by compaction)
+        // leave the final message clean, so only genuine failures set the exit
+        // code below.
+        let failed = false
         if (args.command) {
-          await sdk.session.command({
+          const res = await sdk.session.command({
             sessionID,
             agent,
             model: args.model,
@@ -682,27 +688,30 @@ export const RunCommand = effectCmd({
             arguments: message,
             variant: args.variant,
           })
+          failed = Boolean(res.data?.info?.error)
         } else {
           const model = args.model ? Provider.parseModel(args.model) : undefined
-          await sdk.session.prompt({
+          const res = await sdk.session.prompt({
             sessionID,
             agent,
             model,
             variant: args.variant,
             parts: [...files, { type: "text", text: message }],
           })
+          failed = Boolean(res.data?.info?.error)
         }
 
         // prompt()/command() return once the main session is idle, but background
         // (child) sessions may still be running. Wait for all of them to finish
         // before returning so disposing the instance doesn't kill them.
         await done
+        if (failed) process.exitCode = 1
         // Plugin background handles (e.g. unawaited prompt promises, task-manager
         // timers) can keep the event loop alive after every session is idle. The
         // run command is one-shot, so once all sessions are done we exit
         // deterministically. unref() ensures this timer never prevents a natural
         // exit when no plugin handles are pending.
-        const fallbackExit = setTimeout(() => process.exit(0), 2000)
+        const fallbackExit = setTimeout(() => process.exit(process.exitCode ?? 0), 2000)
         fallbackExit.unref?.()
       }
 

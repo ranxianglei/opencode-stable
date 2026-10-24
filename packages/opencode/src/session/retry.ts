@@ -1,7 +1,10 @@
 import type { NamedError } from "@opencode-ai/core/util/error"
+import * as Log from "@opencode-ai/core/util/log"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
+
+const log = Log.create({ service: "session.retry" })
 
 export type Err = ReturnType<NamedError["toObject"]>
 
@@ -13,6 +16,12 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+// Hard ceiling on total execution attempts (initial call + retries). Without a
+// ceiling a persistent provider failure (continuous 5xx, an endpoint that never
+// answers) would be retried forever and the session would hang with no
+// observable failure. With the 30s backoff cap this bounds fast-failing errors
+// to roughly 3 minutes of wall time.
+export const RETRY_MAX_ATTEMPTS = 10
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
@@ -112,6 +121,10 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const message = retryable(error)
       if (!message) return Cause.done(meta.attempt)
+      if (meta.attempt >= RETRY_MAX_ATTEMPTS) {
+        log.warn("retry attempts exhausted", { attempt: meta.attempt, message })
+        return Cause.done(meta.attempt)
+      }
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
