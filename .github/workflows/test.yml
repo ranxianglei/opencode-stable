@@ -16,6 +16,7 @@ concurrency:
 permissions:
   contents: read
   checks: write
+  actions: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -83,6 +84,94 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+          path: packages/*/.artifacts/unit/junit.xml
+
+  # Reruns the full unit suite on a fresh windows-latest runner, but only when
+  # the unit (windows) leg failed: runner congestion intermittently times out
+  # timing-sensitive tests with no code change (issue #33). Green retry =
+  # environmental failure; red retry = real regression.
+  unit-windows-retry:
+    name: unit (windows) retry
+    needs: unit
+    if: always() && needs.unit.result == 'failure'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check whether unit (windows) failed
+        id: probe
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              filter: "latest",
+              per_page: 100,
+            })
+            const win = data.jobs.find((job) => job.name === "unit (windows)")
+            const failed = win?.conclusion === "failure"
+            core.setOutput("failed", failed ? "true" : "false")
+            core.info(failed ? "unit (windows) failed; rerunning on a fresh runner" : "unit (windows) did not fail; nothing to do")
+
+      - name: Checkout repository
+        if: steps.probe.outputs.failed == 'true'
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        if: steps.probe.outputs.failed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup Bun
+        if: steps.probe.outputs.failed == 'true'
+        uses: ./.github/actions/setup-bun
+
+      - name: Configure git identity
+        if: steps.probe.outputs.failed == 'true'
+        run: |
+          git config --global user.email "bot@opencode.ai"
+          git config --global user.name "opencode"
+
+      - name: Cache Turbo
+        if: steps.probe.outputs.failed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/turbo
+          key: turbo-Windows-${{ hashFiles('turbo.json', '**/package.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-Windows-${{ hashFiles('turbo.json', '**/package.json') }}-
+            turbo-Windows-
+
+      - name: Rerun unit tests
+        if: steps.probe.outputs.failed == 'true'
+        run: bun turbo test:ci
+        env:
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: true
+
+      - name: Publish unit reports
+        if: always() && steps.probe.outputs.failed == 'true'
+        uses: mikepenz/action-junit-report@v6
+        with:
+          report_paths: packages/*/.artifacts/unit/junit.xml
+          check_name: "unit results (windows) retry"
+          detailed_summary: true
+          include_time_in_summary: true
+          fail_on_failure: false
+
+      - name: Upload unit artifacts
+        if: always() && steps.probe.outputs.failed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-windows-retry-${{ github.run_attempt }}
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7

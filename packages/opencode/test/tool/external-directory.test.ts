@@ -127,10 +127,10 @@ describe("tool.assertExternalDirectory", () => {
       await using tmp = await tmpdir({ git: true })
 
       const target = path.join(outerTmp.path, "outside.txt")
-      const alt = target
-        .replace(/^[A-Za-z]:/, "")
-        .replaceAll("\\", "/")
-        .toLowerCase()
+      // Keep the drive letter: normalizePath() resolves drive-less paths against the process cwd, and on
+      // windows-latest the repo/cwd lives on D: while %TEMP% is on C: (#24), so a drive-less variant would
+      // point at a phantom path. Lowercase + forward slashes still exercise case/separator normalization.
+      const alt = target.replaceAll("\\", "/").toLowerCase()
 
       await WithInstance.provide({
         directory: tmp.path,

@@ -1329,7 +1329,9 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+    // Windows runners spawn shells much slower (cold cmd.exe/powershell + Defender); keep the tight
+    // 3s budget elsewhere so regressions still fail fast. (#33)
+    process.platform === "win32" ? 30_000 : 3_000,
 )
 
 it.live(
@@ -1369,7 +1371,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+    process.platform === "win32" ? 30_000 : 3_000,
 )
 
 unix(
