@@ -263,19 +263,15 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
-      const started = yield* Deferred.make<void>()
-      const fiber = yield* runner
-        .ensureRunning(
-          Effect.gen(function* () {
-            yield* Deferred.succeed(started, undefined)
-            return yield* Effect.never.pipe(Effect.as("x"))
-          }),
-        )
-        .pipe(Effect.forkChild)
-      yield* Deferred.await(started).pipe(Effect.timeout("250 millis"))
+      const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("x"))).pipe(Effect.forkChild)
+      // ensureRunning runs in the forked fiber above; poll until it flips the runner to Running.
+      // Fixed 250ms soft timeouts used to expire on loaded CI runners, leaving the runner Idle so
+      // startShell below succeeded and the test failed spuriously (#41).
       yield* Effect.gen(function* () {
-        while (runner.state._tag !== "Running") yield* Effect.yieldNow
-      }).pipe(Effect.timeout("250 millis"))
+        while (runner.state._tag !== "Running") {
+          yield* Effect.sleep("20 millis")
+        }
+      }).pipe(Effect.timeout("5 seconds"))
 
       const exit = yield* runner.startShell(Effect.succeed("nope")).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
