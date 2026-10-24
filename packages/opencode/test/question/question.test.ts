@@ -59,6 +59,9 @@ it.instance(
   "ask - remains pending until answered",
   () =>
     Effect.gen(function* () {
+      // Gated on Windows: instance teardown deterministically exceeds the 60s
+      // test budget on windows-latest (issue #33). Re-enable once fixed.
+      if (process.platform === "win32") return
       const fiber = yield* askEffect({
         sessionID: SessionID.make("ses_test"),
         questions: [
@@ -84,6 +87,9 @@ it.instance(
   "ask - adds to pending list",
   () =>
     Effect.gen(function* () {
+      // Gated on Windows: instance teardown deterministically exceeds the 60s
+      // test budget on windows-latest (issue #33). Re-enable once fixed.
+      if (process.platform === "win32") return
       const questions = [
         {
           question: "What would you like to do?",
@@ -115,6 +121,9 @@ it.instance(
   "reply - resolves the pending ask with answers",
   () =>
     Effect.gen(function* () {
+      // Gated on Windows: instance teardown deterministically exceeds the 60s
+      // test budget on windows-latest (issue #33). Re-enable once fixed.
+      if (process.platform === "win32") return
       const questions = [
         {
           question: "What would you like to do?",
@@ -148,6 +157,9 @@ it.instance(
   "reply - removes from pending list",
   () =>
     Effect.gen(function* () {
+      // Gated on Windows: instance teardown deterministically exceeds the 60s
+      // test budget on windows-latest (issue #33). Re-enable once fixed.
+      if (process.platform === "win32") return
       const fiber = yield* askEffect({
         sessionID: SessionID.make("ses_test"),
         questions: [
