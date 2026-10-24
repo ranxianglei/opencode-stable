@@ -294,7 +294,14 @@ describe("ShareNext", () => {
               },
             ],
           })
-          yield* Effect.sleep(1_250)
+          // The coalesced flush lands ~1s after the first diff event (see ShareNext.sync). A fixed
+          // 1.25s sleep left only ~250ms of margin for fork scheduling + timer + flush on loaded CI
+          // runners and flaked intermittently (#41). Poll for the sync instead.
+          for (let i = 0; i < 100 && seen.length === 0; i++) {
+            yield* Effect.sleep(50)
+          }
+          // Settle so the exactly-one assertion below observes a spurious second sync if one exists.
+          yield* Effect.sleep(300)
 
           expect(seen).toHaveLength(1)
           expect(seen[0].url).toBe("https://legacy-share.example.com/api/share/shr_abc/sync")
