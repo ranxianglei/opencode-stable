@@ -95,7 +95,10 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: ubuntu-latest
+            # Pinned: ubuntu-latest moved to ubuntu-26.04 (2026-11-11) which
+            # Playwright 1.59.1 cannot install chromium on. 24.04 is the last
+            # supported image and is empirically green (2026-09-29 run).
+            host: ubuntu-24.04
           - name: windows
             host: windows-latest
     runs-on: ${{ matrix.settings.host }}
