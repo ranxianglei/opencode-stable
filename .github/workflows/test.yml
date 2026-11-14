@@ -95,7 +95,10 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: ubuntu-latest
+            # Pin to ubuntu-24.04: ubuntu-latest migrated to ubuntu-26.04
+            # (Oct 2026), which Playwright 1.59.1 does not support for
+            # chromium — the browser install fails before any test runs.
+            host: ubuntu-24.04
           - name: windows
             host: windows-latest
     runs-on: ${{ matrix.settings.host }}
